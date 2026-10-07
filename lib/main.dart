@@ -1,43 +1,9 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
-}
-
-/// Model: turns one JSON object into a Dart object.
-class Post {
-  final int id;
-  final String title;
-  final String body;
-
-  Post({required this.id, required this.title, required this.body});
-
-  factory Post.fromJson(Map<String, dynamic> json) {
-    return Post(
-      id: json['id'] as int,
-      title: json['title'] as String,
-      body: json['body'] as String,
-    );
-  }
-}
-
-/// Fetch: GET request -> check status -> decode JSON -> list of models.
-Future<List<Post>> fetchPosts() async {
-  final response = await http.get(
-    Uri.parse('https://jsonplaceholder.typicode.com/posts'),
-  );
-
-  if (response.statusCode == 200) {
-    final List<dynamic> data = jsonDecode(response.body);
-    return data
-        .map((item) => Post.fromJson(item as Map<String, dynamic>))
-        .toList();
-  } else {
-    throw Exception('Failed to load posts (${response.statusCode})');
-  }
 }
 
 class MyApp extends StatelessWidget {
@@ -46,83 +12,130 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'API ListView Demo',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      home: const PostListPage(),
+      title: 'API List App',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 184, 14, 65)),
+        useMaterial3: true,
+      ),
+      home: const UsersPage(),
     );
   }
 }
 
-class PostListPage extends StatefulWidget {
-  const PostListPage({super.key});
+class User {
+  final int id;
+  final String name;
+  final String username;
+  final String email;
 
-  @override
-  State<PostListPage> createState() => _PostListPageState();
+  User({
+    required this.id,
+    required this.name,
+    required this.username,
+    required this.email,
+  });
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'],
+      name: json['name'],
+      username: json['username'],
+      email: json['email'],
+    );
+  }
 }
 
-class _PostListPageState extends State<PostListPage> {
-  // Created once in initState so the request isn't re-fired on every rebuild.
-  late Future<List<Post>> _futurePosts;
+class UsersPage extends StatefulWidget {
+  const UsersPage({super.key});
+
+  @override
+  State<UsersPage> createState() => _UsersPageState();
+}
+
+class _UsersPageState extends State<UsersPage> {
+  List<User> users = [];
+  bool isLoading = true;
+  String errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _futurePosts = fetchPosts();
+    fetchUsers();
   }
 
-  Future<void> _refresh() async {
-    setState(() {
-      _futurePosts = fetchPosts();
-    });
-    await _futurePosts;
+  Future<void> fetchUsers() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://jsonplaceholder.typicode.com/users'),
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+
+        setState(() {
+          users = data.map((json) => User.fromJson(json)).toList();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          errorMessage = 'Failed to load users.';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Error: $e';
+        isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Posts')),
-      body: FutureBuilder<List<Post>>(
-        future: _futurePosts,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final posts = snapshot.data ?? [];
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              itemCount: posts.length,
-              itemBuilder: (context, index) {
-                final post = posts[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  child: ListTile(
-                    leading: CircleAvatar(child: Text('${post.id}')),
-                    title: Text(
-                      post.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      post.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        },
+      appBar: AppBar(
+        title: const Text('Users from API'),
+        centerTitle: true,
       ),
+      body: isLoading
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : errorMessage.isNotEmpty
+              ? Center(
+                  child: Text(errorMessage),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      elevation: 3,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          child: Text('${user.id}'),
+                        ),
+                        title: Text(
+                          user.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('@${user.username}'),
+                            Text(user.email),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
